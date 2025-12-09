@@ -2,13 +2,14 @@
 
 > **Read any text aloud using Microsoft Edge's free TTS API - no API key needed!**
 
-A lightweight text-to-speech solution for Linux using Microsoft Edge's online TTS service. Works on any Linux distro with Wayland or X11!
+A lightweight, **streaming** text-to-speech solution for Linux using Microsoft Edge's online TTS service. Audio starts playing **instantly** as it's being generated - no waiting for full downloads!
 
 ![Demo](https://img.shields.io/badge/Highlight_Text-Super%2BE-blue?style=for-the-badge) → 🔊 Reads aloud!
 
 ## ✨ Features
 
 - 🆓 **Completely free** – Uses Microsoft Edge's TTS API, no API key required
+- ⚡ **Instant playback** – Streaming audio starts immediately, no waiting
 - 🎯 **400+ voices** – Multiple languages and voice styles
 - ⏯️ **Pause/Resume** – Press keybind again to pause, again to resume
 - ⏹️ **Stop anytime** – Shift+keybind to stop playback
@@ -146,7 +147,7 @@ bindsym $mod+Shift+e exec /path/to/edge_tts_stop.sh
 
 ### Quick Start
 1. **Highlight any text** in any application
-2. **Press `Super+E`** → Audio starts playing
+2. **Press `Super+E`** → Audio starts playing instantly!
 3. **Press `Super+E` again** → Pause/Resume
 4. **Press `Super+Shift+E`** → Stop
 

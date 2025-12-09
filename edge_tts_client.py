@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """
-Edge TTS Client - Uses the same DRM approach as edge-tts-extension browser extension.
-This bypasses issues with the edge-tts Python package.
-Supports long text by chunking (same as browser extension).
+Edge TTS Streaming Client - Outputs audio chunks as they arrive for immediate playback.
+This enables near-instant audio start, just like the browser extension.
 """
 
 import asyncio
@@ -10,12 +9,13 @@ import hashlib
 import time
 import uuid
 import sys
-from typing import List
+import os
+from typing import List, Optional
 
 try:
     import websockets
 except ImportError:
-    print("Installing websockets...")
+    print("Installing websockets...", file=sys.stderr)
     import subprocess
     subprocess.check_call([sys.executable, "-m", "pip", "install", "--user", "websockets"])
     import websockets
@@ -56,11 +56,9 @@ def escape_xml(text: str) -> str:
 
 def remove_incompatible_characters(text: str) -> str:
     """Remove characters that cause issues with TTS"""
-    # Remove null bytes and control characters
     result = ""
     for char in text:
         code = ord(char)
-        # Keep printable ASCII, common unicode, newlines, tabs
         if code >= 32 or char in '\n\r\t':
             result += char
     return result
@@ -69,16 +67,13 @@ def remove_incompatible_characters(text: str) -> str:
 def split_text_by_byte_length(text: str, max_bytes: int) -> List[str]:
     """
     Split text into chunks of max_bytes, trying to split at natural boundaries.
-    Same algorithm as browserSplitTextByByteLength in browserCommunicate.ts
     """
     chunks = []
     text_bytes = text.encode('utf-8')
     
     while len(text_bytes) > max_bytes:
-        # Find split point
         split_at = max_bytes
         
-        # Try to find a good split point (newline or space)
         slice_text = text_bytes[:max_bytes].decode('utf-8', errors='ignore')
         last_newline = slice_text.rfind('\n')
         last_space = slice_text.rfind(' ')
@@ -107,10 +102,7 @@ def date_to_string() -> str:
 
 
 def parse_binary_message(data: bytes) -> tuple:
-    """
-    Parse binary message from WebSocket.
-    Format: 2-byte big-endian header length, then header, then audio data.
-    """
+    """Parse binary message from WebSocket."""
     if len(data) < 2:
         return {}, b''
     
@@ -142,8 +134,8 @@ def parse_text_message(data: str) -> tuple:
     return headers, data[header_end + 4:] if header_end != -1 else data
 
 
-async def synthesize_chunk(text: str, voice: str, rate: str, volume: str, pitch: str) -> bytes:
-    """Synthesize a single chunk of text, returns audio bytes."""
+async def stream_chunk(text: str, voice: str, rate: str, volume: str, pitch: str, output_stream):
+    """Stream a single chunk of text, writing audio bytes as they arrive."""
     sec_ms_gec = generate_sec_ms_gec()
     sec_ms_gec_version = f"1-{CHROMIUM_VERSION}"
     connect_id = generate_connect_id()
@@ -185,8 +177,6 @@ async def synthesize_chunk(text: str, voice: str, rate: str, volume: str, pitch:
         f"{ssml}"
     )
     
-    audio_data = bytearray()
-    
     async with websockets.connect(wss_url) as websocket:
         await websocket.send(config_message)
         await websocket.send(ssml_message)
@@ -195,23 +185,23 @@ async def synthesize_chunk(text: str, voice: str, rate: str, volume: str, pitch:
             if isinstance(message, bytes):
                 headers, data = parse_binary_message(message)
                 if headers.get('Path') == 'audio' and len(data) > 0:
-                    audio_data.extend(data)
+                    # Write audio chunk immediately to output stream
+                    output_stream.write(data)
+                    output_stream.flush()
             else:
                 headers, _ = parse_text_message(message)
                 if headers.get('Path') == 'turn.end':
                     break
-    
-    return bytes(audio_data)
 
 
-async def synthesize(text: str, voice: str = "en-US-AndrewMultilingualNeural", 
-                     rate: str = "+0%", volume: str = "+0%", pitch: str = "+0Hz",
-                     output_file: str = "/tmp/edge_tts_output.mp3") -> bool:
+async def stream_synthesize(text: str, voice: str = "en-US-AndrewMultilingualNeural", 
+                            rate: str = "+0%", volume: str = "+0%", pitch: str = "+0Hz",
+                            output_file: Optional[str] = None) -> bool:
     """
-    Synthesize text to speech, handling long text by chunking.
-    Returns True on success, False on failure.
+    Stream text to speech, outputting audio as chunks arrive.
+    If output_file is provided, writes to that file.
+    Otherwise writes to stdout for piping to mpv.
     """
-    # Clean and split text into chunks
     clean_text = remove_incompatible_characters(text)
     chunks = split_text_by_byte_length(escape_xml(clean_text), CHUNK_SIZE)
     
@@ -219,21 +209,21 @@ async def synthesize(text: str, voice: str = "en-US-AndrewMultilingualNeural",
         print("No text to synthesize", file=sys.stderr)
         return False
     
-    all_audio = bytearray()
-    
     try:
-        for i, chunk in enumerate(chunks):
-            audio = await synthesize_chunk(chunk, voice, rate, volume, pitch)
-            if audio:
-                all_audio.extend(audio)
-        
-        if all_audio:
-            with open(output_file, 'wb') as f:
-                f.write(all_audio)
-            return True
+        # Decide where to output
+        if output_file:
+            output_stream = open(output_file, 'wb')
         else:
-            print("No audio data received", file=sys.stderr)
-            return False
+            # Write to stdout binary mode
+            output_stream = sys.stdout.buffer
+        
+        for chunk in chunks:
+            await stream_chunk(chunk, voice, rate, volume, pitch, output_stream)
+        
+        if output_file:
+            output_stream.close()
+        
+        return True
             
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
@@ -244,17 +234,17 @@ async def synthesize(text: str, voice: str = "en-US-AndrewMultilingualNeural",
 
 def main():
     import argparse
-    parser = argparse.ArgumentParser(description="Edge TTS Client")
+    parser = argparse.ArgumentParser(description="Edge TTS Streaming Client")
     parser.add_argument("--text", "-t", required=True, help="Text to synthesize")
     parser.add_argument("--voice", "-v", default="en-US-AndrewMultilingualNeural", help="Voice name")
     parser.add_argument("--rate", "-r", default="+0%", help="Speech rate (e.g., +10%, -20%)")
     parser.add_argument("--volume", default="+0%", help="Volume (e.g., +10%, -20%)")
     parser.add_argument("--pitch", "-p", default="+0Hz", help="Pitch (e.g., +10Hz, -5Hz)")
-    parser.add_argument("--output", "-o", default="/tmp/edge_tts_output.mp3", help="Output file")
+    parser.add_argument("--output", "-o", default=None, help="Output file (default: stdout for streaming)")
     
     args = parser.parse_args()
     
-    success = asyncio.run(synthesize(
+    success = asyncio.run(stream_synthesize(
         text=args.text,
         voice=args.voice,
         rate=args.rate,

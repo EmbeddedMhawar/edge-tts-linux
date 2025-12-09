@@ -203,7 +203,8 @@ async def stream_synthesize(text: str, voice: str = "en-US-AndrewMultilingualNeu
     Otherwise writes to stdout for piping to mpv.
     """
     clean_text = remove_incompatible_characters(text)
-    chunks = split_text_by_byte_length(escape_xml(clean_text), CHUNK_SIZE)
+    # Don't escape here - stream_chunk will escape before sending to API
+    chunks = split_text_by_byte_length(clean_text, CHUNK_SIZE)
     
     if not chunks:
         print("No text to synthesize", file=sys.stderr)

@@ -220,6 +220,7 @@ MIT License - Use it however you want!
 ## 🙏 Acknowledgments
 
 - [rany2/edge-tts](https://github.com/rany2/edge-tts) - Original edge-tts Python package (our implementation uses the same DRM approach)
+- [travisvn/edge-tts-extension](https://github.com/travisvn/edge-tts-extension) - Browser extension that inspired the streaming approach
 - Microsoft Edge TTS for the free API
 
 ---

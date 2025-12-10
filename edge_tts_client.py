@@ -51,7 +51,7 @@ def escape_xml(text: str) -> str:
             .replace("<", "&lt;")
             .replace(">", "&gt;")
             .replace('"', "&quot;")
-            .replace("'", "&#39;"))
+            .replace("'", "&apos;"))
 
 
 def remove_incompatible_characters(text: str) -> str:
@@ -177,32 +177,21 @@ async def stream_chunk(text: str, voice: str, rate: str, volume: str, pitch: str
         f"{ssml}"
     )
     
-    try:
-        async with websockets.connect(wss_url) as websocket:
-            await websocket.send(config_message)
-            await websocket.send(ssml_message)
-            
-            async for message in websocket:
-                if isinstance(message, bytes):
-                    headers, data = parse_binary_message(message)
-                    if headers.get('Path') == 'audio' and len(data) > 0:
-                        # Write audio chunk immediately to output stream
-                        try:
-                            output_stream.write(data)
-                            output_stream.flush()
-                        except BrokenPipeError:
-                            print("Broken pipe - reader closed connection", file=sys.stderr)
-                            return
-                        except Exception as e:
-                            print(f"Error writing to output: {e}", file=sys.stderr)
-                            raise
-                else:
-                    headers, _ = parse_text_message(message)
-                    if headers.get('Path') == 'turn.end':
-                        break
-    except Exception as e:
-        print(f"WebSocket error in stream_chunk: {e}", file=sys.stderr)
-        raise
+    async with websockets.connect(wss_url) as websocket:
+        await websocket.send(config_message)
+        await websocket.send(ssml_message)
+        
+        async for message in websocket:
+            if isinstance(message, bytes):
+                headers, data = parse_binary_message(message)
+                if headers.get('Path') == 'audio' and len(data) > 0:
+                    # Write audio chunk immediately to output stream
+                    output_stream.write(data)
+                    output_stream.flush()
+            else:
+                headers, _ = parse_text_message(message)
+                if headers.get('Path') == 'turn.end':
+                    break
 
 
 async def stream_synthesize(text: str, voice: str = "en-US-AndrewMultilingualNeural", 
@@ -247,7 +236,8 @@ async def stream_synthesize(text: str, voice: str = "en-US-AndrewMultilingualNeu
 def main():
     import argparse
     parser = argparse.ArgumentParser(description="Edge TTS Streaming Client")
-    parser.add_argument("--text", "-t", required=True, help="Text to synthesize")
+    parser.add_argument("--text", "-t", help="Text to synthesize (use --stdin to read from stdin instead)")
+    parser.add_argument("--stdin", action="store_true", help="Read text from stdin (safer for special characters)")
     parser.add_argument("--voice", "-v", default="en-US-AndrewMultilingualNeural", help="Voice name")
     parser.add_argument("--rate", "-r", default="+0%", help="Speech rate (e.g., +10%, -20%)")
     parser.add_argument("--volume", default="+0%", help="Volume (e.g., +10%, -20%)")
@@ -256,8 +246,17 @@ def main():
     
     args = parser.parse_args()
     
+    # Get text from stdin or argument
+    if args.stdin:
+        text = sys.stdin.read()
+    elif args.text:
+        text = args.text
+    else:
+        print("Error: Either --text or --stdin is required", file=sys.stderr)
+        sys.exit(1)
+    
     success = asyncio.run(stream_synthesize(
-        text=args.text,
+        text=text,
         voice=args.voice,
         rate=args.rate,
         volume=args.volume,

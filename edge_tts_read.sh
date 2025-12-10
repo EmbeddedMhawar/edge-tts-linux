@@ -15,7 +15,7 @@ PIDFILE="/tmp/tts_read.pid"
 PYPIDFILE="/tmp/tts_python.pid"
 PAUSEFILE="/tmp/tts_read.paused"
 GENFILE="/tmp/tts_streaming"
-ERRORLOG="/tmp/edge_tts_error.log"
+TEXTFILE="/tmp/tts_text.txt"
 SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
 # ----------------
 
@@ -51,16 +51,17 @@ if [ -f "$PIDFILE" ]; then
         exit 0
     fi
     # Process died, clean up
-    rm -f "$PIDFILE" "$PYPIDFILE" "$PAUSEFILE" "$FIFO"
+    rm -f "$PIDFILE" "$PYPIDFILE" "$PAUSEFILE" "$FIFO" "$TEXTFILE"
 fi
 
 # Get text from clipboard (primary selection = highlighted text, clipboard = copied text)
+# Note: Using sed for trimming instead of xargs because xargs breaks on apostrophes
 TEXT=$(wl-paste -p 2>/dev/null | tr -d '\0')
-TEXT_TRIMMED=$(echo "$TEXT" | xargs 2>/dev/null)
+TEXT_TRIMMED=$(echo "$TEXT" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
 
 if [ -z "$TEXT_TRIMMED" ]; then
     TEXT=$(wl-paste 2>/dev/null | tr -d '\0')
-    TEXT_TRIMMED=$(echo "$TEXT" | xargs 2>/dev/null)
+    TEXT_TRIMMED=$(echo "$TEXT" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
 fi
 
 if [ -z "$TEXT_TRIMMED" ]; then
@@ -79,49 +80,38 @@ notify-send -u low -t 2000 "TTS 🔊" "Reading: $PREVIEW"
 # Mark as streaming
 touch "$GENFILE"
 
-# Clean up any existing FIFO and error log
-rm -f "$FIFO" "$ERRORLOG"
+# Save text to file to avoid shell escaping issues
+printf '%s' "$TEXT" > "$TEXTFILE"
+
+# Clean up any existing FIFO
+rm -f "$FIFO"
 mkfifo "$FIFO"
 
 # Start the streaming process in background
 (
-    # Start mpv first (it will block waiting for data)
-    mpv --no-video --really-quiet --cache=no --demuxer-max-bytes=1M "$FIFO" &
-    MPV_PID=$!
-    echo $MPV_PID > "$PIDFILE"
-    
-    # Give mpv a moment to open the FIFO
-    sleep 0.1
-    
-    # Start Python streaming to FIFO
+    # Start Python streaming in background, reading text from stdin via file
     python3 "$SCRIPT_DIR/edge_tts_client.py" \
-        --text "$TEXT" \
+        --stdin \
         --voice "$VOICE" \
         --rate "$RATE" \
         --volume "$VOLUME" \
         --pitch "$PITCH" \
-        --output "$FIFO" 2>"$ERRORLOG" &
+        --output "$FIFO" < "$TEXTFILE" 2>/tmp/edge_tts_error.log &
     PY_PID=$!
     echo $PY_PID > "$PYPIDFILE"
+    
+    # Start mpv reading from FIFO (will block until Python writes)
+    mpv --no-video --really-quiet --cache=no "$FIFO" &
+    MPV_PID=$!
+    echo $MPV_PID > "$PIDFILE"
     
     # Remove generating flag once both processes started
     rm -f "$GENFILE"
     
-    # Wait for Python to finish
-    wait $PY_PID 2>/dev/null
-    PY_EXIT=$?
-    
-    # Check if Python errored
-    if [ $PY_EXIT -ne 0 ] && [ -s "$ERRORLOG" ]; then
-        ERROR=$(tail -3 "$ERRORLOG" 2>/dev/null)
-        notify-send -u critical "TTS Error" "$ERROR"
-        kill $MPV_PID 2>/dev/null
-    fi
-    
-    # Wait for mpv to finish playing
+    # Wait for mpv to finish (it will finish when FIFO closes)
     wait $MPV_PID 2>/dev/null
     
     # Clean up
-    rm -f "$PIDFILE" "$PYPIDFILE" "$PAUSEFILE" "$FIFO"
+    rm -f "$PIDFILE" "$PYPIDFILE" "$PAUSEFILE" "$FIFO" "$TEXTFILE"
 ) &
 disown

@@ -15,6 +15,7 @@ PIDFILE="/tmp/tts_read.pid"
 PYPIDFILE="/tmp/tts_python.pid"
 PAUSEFILE="/tmp/tts_read.paused"
 GENFILE="/tmp/tts_streaming"
+ERRORLOG="/tmp/edge_tts_error.log"
 SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
 # ----------------
 
@@ -78,32 +79,46 @@ notify-send -u low -t 2000 "TTS 🔊" "Reading: $PREVIEW"
 # Mark as streaming
 touch "$GENFILE"
 
-# Clean up any existing FIFO
-rm -f "$FIFO"
+# Clean up any existing FIFO and error log
+rm -f "$FIFO" "$ERRORLOG"
 mkfifo "$FIFO"
 
 # Start the streaming process in background
 (
-    # Start Python streaming in background, writing to FIFO
+    # Start mpv first (it will block waiting for data)
+    mpv --no-video --really-quiet --cache=no --demuxer-max-bytes=1M "$FIFO" &
+    MPV_PID=$!
+    echo $MPV_PID > "$PIDFILE"
+    
+    # Give mpv a moment to open the FIFO
+    sleep 0.1
+    
+    # Start Python streaming to FIFO
     python3 "$SCRIPT_DIR/edge_tts_client.py" \
         --text "$TEXT" \
         --voice "$VOICE" \
         --rate "$RATE" \
         --volume "$VOLUME" \
         --pitch "$PITCH" \
-        --output "$FIFO" 2>/tmp/edge_tts_error.log &
+        --output "$FIFO" 2>"$ERRORLOG" &
     PY_PID=$!
     echo $PY_PID > "$PYPIDFILE"
-    
-    # Start mpv reading from FIFO (will block until Python writes)
-    mpv --no-video --really-quiet --cache=no "$FIFO" &
-    MPV_PID=$!
-    echo $MPV_PID > "$PIDFILE"
     
     # Remove generating flag once both processes started
     rm -f "$GENFILE"
     
-    # Wait for mpv to finish (it will finish when FIFO closes)
+    # Wait for Python to finish
+    wait $PY_PID 2>/dev/null
+    PY_EXIT=$?
+    
+    # Check if Python errored
+    if [ $PY_EXIT -ne 0 ] && [ -s "$ERRORLOG" ]; then
+        ERROR=$(tail -3 "$ERRORLOG" 2>/dev/null)
+        notify-send -u critical "TTS Error" "$ERROR"
+        kill $MPV_PID 2>/dev/null
+    fi
+    
+    # Wait for mpv to finish playing
     wait $MPV_PID 2>/dev/null
     
     # Clean up

@@ -177,21 +177,32 @@ async def stream_chunk(text: str, voice: str, rate: str, volume: str, pitch: str
         f"{ssml}"
     )
     
-    async with websockets.connect(wss_url) as websocket:
-        await websocket.send(config_message)
-        await websocket.send(ssml_message)
-        
-        async for message in websocket:
-            if isinstance(message, bytes):
-                headers, data = parse_binary_message(message)
-                if headers.get('Path') == 'audio' and len(data) > 0:
-                    # Write audio chunk immediately to output stream
-                    output_stream.write(data)
-                    output_stream.flush()
-            else:
-                headers, _ = parse_text_message(message)
-                if headers.get('Path') == 'turn.end':
-                    break
+    try:
+        async with websockets.connect(wss_url) as websocket:
+            await websocket.send(config_message)
+            await websocket.send(ssml_message)
+            
+            async for message in websocket:
+                if isinstance(message, bytes):
+                    headers, data = parse_binary_message(message)
+                    if headers.get('Path') == 'audio' and len(data) > 0:
+                        # Write audio chunk immediately to output stream
+                        try:
+                            output_stream.write(data)
+                            output_stream.flush()
+                        except BrokenPipeError:
+                            print("Broken pipe - reader closed connection", file=sys.stderr)
+                            return
+                        except Exception as e:
+                            print(f"Error writing to output: {e}", file=sys.stderr)
+                            raise
+                else:
+                    headers, _ = parse_text_message(message)
+                    if headers.get('Path') == 'turn.end':
+                        break
+    except Exception as e:
+        print(f"WebSocket error in stream_chunk: {e}", file=sys.stderr)
+        raise
 
 
 async def stream_synthesize(text: str, voice: str = "en-US-AndrewMultilingualNeural", 

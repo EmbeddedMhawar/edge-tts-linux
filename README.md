@@ -1,23 +1,26 @@
-# 🔊 Edge TTS - Free Text-to-Speech for Linux
+# Edge TTS for Linux
 
-> **Read any text aloud using Microsoft Edge's free TTS API - no API key needed!**
+**Free, streaming text-to-speech for your desktop.**
 
-A lightweight, **streaming** text-to-speech solution for Linux using Microsoft Edge's online TTS service. Audio starts playing **instantly** as it's being generated - no waiting for full downloads!
+A lightweight, instant text-to-speech solution for Linux using Microsoft Edge's online API. No API key required.
 
-![Demo](https://img.shields.io/badge/Highlight_Text-Super%2BE-blue?style=for-the-badge) → 🔊 Reads aloud!
+## Core Philosophy
+TTS on Linux shouldn't be complicated or robotic. This tool provides **instant, high-quality streaming audio** without the need for heavy downloads or paid API keys. It's designed to be a seamless part of your workflow—just highlight and listen.
 
-## ✨ Features
+## Features
 
-- 🆓 **Completely free** – Uses Microsoft Edge's TTS API, no API key required
-- ⚡ **Instant playback** – Streaming audio starts immediately, no waiting
-- 🎯 **400+ voices** – Multiple languages and voice styles
-- ⏯️ **Pause/Resume** – Press keybind again to pause, again to resume
-- ⏹️ **Stop anytime** – Shift+keybind to stop playback
-- 📋 **Read highlighted text** – Just select text and press keybind
-- 🔁 **Long text support** – Automatically chunks long text
-- 🎯 **Lightweight** – Just bash + Python, no bloat
+### 1. Instant Playback
+Stream audio immediately as it's generated. No waiting for the whole file to download.
 
-## 📦 Installation
+### 2. Zero Config
+Uses Microsoft Edge's free TTS API. No accounts, no keys, no hassle.
+
+### 3. Desktop Integration
+Works with any text selection.
+- **Read**: Highlight text -> Press Keybind -> Listen.
+- **Control**: Pause, Resume, or Stop instantly.
+
+## Setup
 
 ### 1. Install Dependencies
 
@@ -72,21 +75,15 @@ environment.systemPackages = with pkgs; [
 ```
 </details>
 
-### 2. Set Up the Script
+### 2. Install Script
 
 ```bash
-# Clone the repository
 git clone https://github.com/EmbeddedMhawar/edge-tts.git
 cd edge-tts
-
-# Make scripts executable
-chmod +x edge_tts_read.sh edge_tts_stop.sh edge_tts_client.py
-
-# Copy to your preferred location (optional)
-cp edge_tts_*.sh edge_tts_client.py ~/bin/
+chmod +x *.sh *.py
 ```
 
-### 3. Set Up Keybindings
+### 3. Keybindings
 
 <details>
 <summary><b>Hyprland</b></summary>
@@ -136,93 +133,5 @@ bindsym $mod+Shift+e exec /path/to/edge_tts_stop.sh
 ```
 </details>
 
-## 🎯 Usage
-
-| Action | Keybinding | Description |
-|--------|-----------|-------------|
-| **Read** | `Super+E` | Reads highlighted or copied text |
-| **Pause** | `Super+E` (while playing) | Pauses playback |
-| **Resume** | `Super+E` (while paused) | Resumes playback |
-| **Stop** | `Super+Shift+E` | Stops playback completely |
-
-### Quick Start
-1. **Highlight any text** in any application
-2. **Press `Super+E`** → Audio starts playing instantly!
-3. **Press `Super+E` again** → Pause/Resume
-4. **Press `Super+Shift+E`** → Stop
-
-## ⚙️ Configuration
-
-Edit `edge_tts_read.sh` to customize:
-
-```bash
-# Voice (run: edge-tts --list-voices to see all 400+ options)
-VOICE="en-US-AndrewMultilingualNeural"
-
-# Speed (-50% to +100%)
-RATE="+10%"
-
-# Volume (-50% to +50%)
-VOLUME="+0%"
-
-# Pitch (-50Hz to +50Hz)
-PITCH="+0Hz"
-```
-
-### Popular Voices
-
-| Voice | Language | Gender |
-|-------|----------|--------|
-| `en-US-AndrewMultilingualNeural` | English (US) | Male |
-| `en-US-JennyNeural` | English (US) | Female |
-| `en-GB-RyanNeural` | English (UK) | Male |
-| `fr-FR-HenriNeural` | French | Male |
-| `de-DE-ConradNeural` | German | Male |
-| `es-ES-AlvaroNeural` | Spanish | Male |
-| `zh-CN-YunxiNeural` | Chinese | Male |
-
-## 🔧 Troubleshooting
-
-### No audio playing
-Make sure mpv is installed and audio is working:
-```bash
-mpv /usr/share/sounds/freedesktop/stereo/bell.oga
-```
-
-### "No text selected" error
-- On Wayland: Make sure `wl-clipboard` is installed
-- On X11: Make sure `xclip` is installed
-
-### Python errors
-Install websockets:
-```bash
-# Arch
-sudo pacman -S python-websockets
-
-# Ubuntu/Debian
-sudo apt install python3-websockets
-
-# Pip (if not available in repos)
-pip install --user websockets
-```
-
-## 🤝 Contributing
-
-PRs welcome! Ideas for improvements:
-- [ ] Voice selection via rofi/dmenu
-- [ ] Speed control via keybinds
-- [ ] Subtitle display while reading
-
-## 📜 License
-
-MIT License - Use it however you want!
-
-## 🙏 Acknowledgments
-
-- [rany2/edge-tts](https://github.com/rany2/edge-tts) - Original edge-tts Python package (our implementation uses the same DRM approach)
-- [travisvn/edge-tts-extension](https://github.com/travisvn/edge-tts-extension) - Browser extension that inspired the streaming approach
-- Microsoft Edge TTS for the free API
-
----
-
-**Made with ❤️ for the Linux community**
+## License
+MIT

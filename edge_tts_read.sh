@@ -54,15 +54,10 @@ if [ -f "$PIDFILE" ]; then
     rm -f "$PIDFILE" "$PYPIDFILE" "$PAUSEFILE" "$FIFO" "$TEXTFILE"
 fi
 
-# Get text from clipboard (primary selection = highlighted text, clipboard = copied text)
+# Get text from clipboard (fallback from primary selection)
 # Note: Using sed for trimming instead of xargs because xargs breaks on apostrophes
-TEXT=$(wl-paste -p 2>/dev/null | tr -d '\0')
+TEXT=$(wl-paste 2>/dev/null | tr -d '\0')
 TEXT_TRIMMED=$(echo "$TEXT" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-
-if [ -z "$TEXT_TRIMMED" ]; then
-    TEXT=$(wl-paste 2>/dev/null | tr -d '\0')
-    TEXT_TRIMMED=$(echo "$TEXT" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-fi
 
 if [ -z "$TEXT_TRIMMED" ]; then
     notify-send -u normal -t 2000 "TTS" "No text selected or copied!"
@@ -89,8 +84,9 @@ mkfifo "$FIFO"
 
 # Start the streaming process in background
 (
-    # Start Python streaming in background, reading text from stdin via file
-    python3 "$SCRIPT_DIR/edge_tts_client.py" \
+    # Start Node.js (TSX) streaming in background, reading text from stdin via file
+    # Ensure dependencies are installed in edge-tts-universal
+    "$SCRIPT_DIR/edge-tts-universal/node_modules/.bin/tsx" "$SCRIPT_DIR/edge-tts-universal/cli.ts" \
         --stdin \
         --voice "$VOICE" \
         --rate "$RATE" \
@@ -101,7 +97,7 @@ mkfifo "$FIFO"
     echo $PY_PID > "$PYPIDFILE"
     
     # Start mpv reading from FIFO (will block until Python writes)
-    mpv --no-video --really-quiet --cache=no "$FIFO" &
+    mpv --no-video --really-quiet --cache=no --really-quiet "$FIFO" &
     MPV_PID=$!
     echo $MPV_PID > "$PIDFILE"
     

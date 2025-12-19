@@ -84,9 +84,8 @@ mkfifo "$FIFO"
 
 # Start the streaming process in background
 (
-    # Start Node.js (TSX) streaming in background, reading text from stdin via file
-    # Ensure dependencies are installed in edge-tts-universal
-    "$SCRIPT_DIR/edge-tts-universal/node_modules/.bin/tsx" "$SCRIPT_DIR/edge-tts-universal/cli.ts" \
+    # Start Node.js streaming in background, reading text from stdin via file
+    node "$SCRIPT_DIR/edge-tts-universal/cli.js" \
         --stdin \
         --voice "$VOICE" \
         --rate "$RATE" \
